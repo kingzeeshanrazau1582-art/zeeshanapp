@@ -1,0 +1,995 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import { useState, useEffect, useCallback } from 'react'
+     4→     4→import { Button } from '@/components/ui/button'
+     5→     5→import { Input } from '@/components/ui/input'
+     6→     6→import { Textarea } from '@/components/ui/textarea'
+     7→     7→import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+     8→     8→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+     9→     9→import { Badge } from '@/components/ui/badge'
+    10→    10→import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+    11→    11→import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+    12→    12→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    13→    13→import { Separator } from '@/components/ui/separator'
+    14→    14→import { ScrollArea } from '@/components/ui/scroll-area'
+    15→    15→import { Skeleton } from '@/components/ui/skeleton'
+    16→    16→import {
+    17→    17→  Play, FileText, Presentation, Radio, Upload, Trash2, Download,
+    18→    18→  ThumbsUp, ThumbsDown, MessageCircle, Eye, LogOut, Shield,
+    19→    19→  Plus, Search, Heart, X, CheckCircle, Video, ChevronDown, ChevronUp,
+    20→    20→  FolderOpen, LayoutGrid, List, UserPlus, LogIn
+    21→    21→} from 'lucide-react'
+    22→    22→import { useToast } from '@/hooks/use-toast'
+    23→    23→
+    24→    24→// ==================== TYPES ====================
+    25→    25→interface User {
+    26→    26→  id: string
+    27→    27→  email: string
+    28→    28→  name: string | null
+    29→    29→  role: string
+    30→    30→}
+    31→    31→
+    32→    32→interface ContentItem {
+    33→    33→  id: string
+    34→    34→  title: string
+    35→    35→  description: string | null
+    36→    36→  type: string
+    37→    37→  fileUrl: string | null
+    38→    38→  liveUrl: string | null
+    39→    39→  fileName: string | null
+    40→    40→  fileSize: number | null
+    41→    41→  views: number
+    42→    42→  createdAt: string
+    43→    43→  comments: CommentItem[]
+    44→    44→  likesCount: number
+    45→    45→  dislikesCount: number
+    46→    46→  _count?: { comments: number; likes: number }
+    47→    47→}
+    48→    48→
+    49→    49→interface CommentItem {
+    50→    50→  id: string
+    51→    51→  text: string
+    52→    52→  userId: string
+    53→    53→  userName: string | null
+    54→    54→  contentId: string
+    55→    55→  createdAt: string
+    56→    56→}
+    57→    57→
+    58→    58→// ==================== HELPERS ====================
+    59→    59→function formatDate(dateStr: string) {
+    60→    60→  const date = new Date(dateStr)
+    61→    61→  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    62→    62→}
+    63→    63→
+    64→    64→function formatFileSize(bytes: number | null) {
+    65→    65→  if (!bytes) return 'N/A'
+    66→    66→  if (bytes < 1024) return bytes + ' B'
+    67→    67→  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
+    68→    68→  return (bytes / 1048576).toFixed(1) + ' MB'
+    69→    69→}
+    70→    70→
+    71→    71→function getTypeIcon(type: string) {
+    72→    72→  switch (type) {
+    73→    73→    case 'video': return <Video className="h-5 w-5" />
+    74→    74→    case 'pdf': return <FileText className="h-5 w-5" />
+    75→    75→    case 'ppt': return <Presentation className="h-5 w-5" />
+    76→    76→    case 'live': return <Radio className="h-5 w-5" />
+    77→    77→    default: return <FileText className="h-5 w-5" />
+    78→    78→  }
+    79→    79→}
+    80→    80→
+    81→    81→function getTypeColor(type: string) {
+    82→    82→  switch (type) {
+    83→    83→    case 'video': return 'bg-rose-500/10 text-rose-600 border-rose-200'
+    84→    84→    case 'pdf': return 'bg-amber-500/10 text-amber-600 border-amber-200'
+    85→    85→    case 'ppt': return 'bg-emerald-500/10 text-emerald-600 border-emerald-200'
+    86→    86→    case 'live': return 'bg-purple-500/10 text-purple-600 border-purple-200'
+    87→    87→    default: return 'bg-gray-500/10 text-gray-600 border-gray-200'
+    88→    88→  }
+    89→    89→}
+    90→    90→
+    91→    91→function getTypeBadgeColor(type: string) {
+    92→    92→  switch (type) {
+    93→    93→    case 'video': return 'bg-rose-100 text-rose-700 hover:bg-rose-100'
+    94→    94→    case 'pdf': return 'bg-amber-100 text-amber-700 hover:bg-amber-100'
+    95→    95→    case 'ppt': return 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100'
+    96→    96→    case 'live': return 'bg-purple-100 text-purple-700 hover:bg-purple-100'
+    97→    97→    default: return 'bg-gray-100 text-gray-700 hover:bg-gray-100'
+    98→    98→  }
+    99→    99→}
+   100→   100→
+   101→   101→// ==================== TOAST ====================
+   102→   102→function ToastDemo({ message, type }: { message: string; type: 'success' | 'error' | 'info' }) {
+   103→   103→  const { toast } = useToast()
+   104→   104→  useEffect(() => {
+   105→   105→    toast({ title: message, variant: type === 'error' ? 'destructive' : 'default' })
+   106→   106→  }, [])
+   107→   107→  return null
+   108→   108→}
+   109→   109→
+   110→   110→// ==================== LOGIN PAGE ====================
+   111→   111→function LoginPage({ onLogin, onRegister }: { onLogin: (user: User) => void; onRegister: (user: User) => void }) {
+   112→   112→  const [isLogin, setIsLogin] = useState(true)
+   113→   113→  const [email, setEmail] = useState('')
+   114→   114→  const [password, setPassword] = useState('')
+   115→   115→  const [name, setName] = useState('')
+   116→   116→  const [loading, setLoading] = useState(false)
+   117→   117→  const [toastMsg, setToastMsg] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+   118→   118→
+   119→   119→  const handleSubmit = async (e: React.FormEvent) => {
+   120→   120→    e.preventDefault()
+   121→   121→    setLoading(true)
+   122→   122→
+   123→   123→    try {
+   124→   124→      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register'
+   125→   125→      const body = isLogin ? { email, password } : { email, password, name }
+   126→   126→
+   127→   127→      const res = await fetch(endpoint, {
+   128→   128→        method: 'POST',
+   129→   129→        headers: { 'Content-Type': 'application/json' },
+   130→   130→        body: JSON.stringify(body),
+   131→   131→      })
+   132→   132→
+   133→   133→      const data = await res.json()
+   134→   134→
+   135→   135→      if (!res.ok) {
+   136→   136→        setToastMsg({ message: data.error || 'Something went wrong', type: 'error' })
+   137→   137→        setLoading(false)
+   138→   138→        return
+   139→   139→      }
+   140→   140→
+   141→   141→      if (isLogin) {
+   142→   142→        onLogin(data)
+   143→   143→      } else {
+   144→   144→        setToastMsg({ message: 'Registration successful! Please login.', type: 'success' })
+   145→   145→        setIsLogin(true)
+   146→   146→      }
+   147→   147→    } catch (error) {
+   148→   148→      setToastMsg({ message: 'Network error. Please try again.', type: 'error' })
+   149→   149→    } finally {
+   150→   150→      setLoading(false)
+   151→   151→    }
+   152→   152→  }
+   153→   153→
+   154→   154→  return (
+   155→   155→    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
+   156→   156→      {toastMsg && <ToastDemo message={toastMsg.message} type={toastMsg.type} />}
+   157→   157→      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+   158→   158→        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-rose-500/5 rounded-full blur-3xl" />
+   159→   159→        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl" />
+   160→   160→      </div>
+   161→   161→
+   162→   162→      <Card className="w-full max-w-md relative z-10 border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl">
+   163→   163→        <CardHeader className="text-center space-y-3 pb-2">
+   164→   164→          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-rose-500 to-purple-600 flex items-center justify-center shadow-lg shadow-rose-500/25">
+   165→   165→            <Play className="h-8 w-8 text-white" />
+   166→   166→          </div>
+   167→   167→          <CardTitle className="text-2xl font-bold text-white">MediaHub</CardTitle>
+   168→   168→          <CardDescription className="text-slate-400">
+   169→   169→            {isLogin ? 'Sign in to your account' : 'Create a new account'}
+   170→   170→          </CardDescription>
+   171→   171→        </CardHeader>
+   172→   172→        <CardContent>
+   173→   173→          <form onSubmit={handleSubmit} className="space-y-4">
+   174→   174→            {!isLogin && (
+   175→   175→              <div className="space-y-2">
+   176→   176→                <label className="text-sm font-medium text-slate-300">Full Name</label>
+   177→   177→                <Input
+   178→   178→                  placeholder="Your name"
+   179→   179→                  value={name}
+   180→   180→                  onChange={(e) => setName(e.target.value)}
+   181→   181→                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-rose-500/50"
+   182→   182→                />
+   183→   183→              </div>
+   184→   184→            )}
+   185→   185→            <div className="space-y-2">
+   186→   186→              <label className="text-sm font-medium text-slate-300">Email</label>
+   187→   187→              <Input
+   188→   188→                type="email"
+   189→   189→                placeholder="your@email.com"
+   190→   190→                value={email}
+   191→   191→                onChange={(e) => setEmail(e.target.value)}
+   192→   192→                required
+   193→   193→                className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-rose-500/50"
+   194→   194→              />
+   195→   195→            </div>
+   196→   196→            <div className="space-y-2">
+   197→   197→              <label className="text-sm font-medium text-slate-300">Password</label>
+   198→   198→              <Input
+   199→   199→                type="password"
+   200→   200→                placeholder="Enter password"
+   201→   201→                value={password}
+   202→   202→                onChange={(e) => setPassword(e.target.value)}
+   203→   203→                required
+   204→   204→                className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-rose-500/50"
+   205→   205→              />
+   206→   206→            </div>
+   207→   207→            <Button
+   208→   208→              type="submit"
+   209→   209→              disabled={loading}
+   210→   210→              className="w-full bg-gradient-to-r from-rose-500 to-purple-600 hover:from-rose-600 hover:to-purple-700 text-white font-semibold shadow-lg shadow-rose-500/25 transition-all duration-300"
+   211→   211→            >
+   212→   212→              {loading ? (
+   213→   213→                <span className="flex items-center gap-2">
+   214→   214→                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+   215→   215→                  Processing...
+   216→   216→                </span>
+   217→   217→              ) : isLogin ? (
+   218→   218→                <span className="flex items-center gap-2"><LogIn className="h-4 w-4" /> Sign In</span>
+   219→   219→              ) : (
+   220→   220→                <span className="flex items-center gap-2"><UserPlus className="h-4 w-4" /> Create Account</span>
+   221→   221→              )}
+   222→   222→            </Button>
+   223→   223→          </form>
+   224→   224→          <div className="mt-4 text-center">
+   225→   225→            <button
+   226→   226→              onClick={() => setIsLogin(!isLogin)}
+   227→   227→              className="text-sm text-slate-400 hover:text-rose-400 transition-colors"
+   228→   228→            >
+   229→   229→              {isLogin ? "Don't have an account? Sign Up" : 'Already have an account? Sign In'}
+   230→   230→            </button>
+   231→   231→          </div>
+   232→   232→          <Separator className="my-4 bg-white/10" />
+   233→   233→          <div className="text-center text-xs text-slate-500 space-y-1">
+   234→   234→            <p className="font-medium text-slate-400">Demo Credentials</p>
+   235→   235→            <p>Admin: <span className="text-rose-400">admin@mediaplatform.com</span> / <span className="text-rose-400">admin123</span></p>
+   236→   236→            <p>User: <span className="text-purple-400">user@mediaplatform.com</span> / <span className="text-purple-400">admin123</span></p>
+   237→   237→          </div>
+   238→   238→        </CardContent>
+   239→   239→      </Card>
+   240→   240→    </div>
+   241→   241→  )
+   242→   242→}
+   243→   243→
+   244→   244→// ==================== ADMIN PANEL ====================
+   245→   245→function AdminPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
+   246→   246→  const [contents, setContents] = useState<ContentItem[]>([])
+   247→   247→  const [loading, setLoading] = useState(true)
+   248→   248→  const [uploading, setUploading] = useState(false)
+   249→   249→  const [showUploadForm, setShowUploadForm] = useState(false)
+   250→   250→  const [toastMsg, setToastMsg] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+   251→   251→  const [uploadForm, setUploadForm] = useState({
+   252→   252→    title: '', description: '', type: 'video', file: null as File | null, liveUrl: ''
+   253→   253→  })
+   254→   254→
+   255→   255→  const fetchContents = useCallback(async () => {
+   256→   256→    try {
+   257→   257→      const res = await fetch('/api/content')
+   258→   258→      const data = await res.json()
+   259→   259→      setContents(data)
+   260→   260→    } catch (error) {
+   261→   261→      console.error('Fetch error:', error)
+   262→   262→    } finally {
+   263→   263→      setLoading(false)
+   264→   264→    }
+   265→   265→  }, [])
+   266→   266→
+   267→   267→  useEffect(() => { fetchContents() }, [fetchContents])
+   268→   268→
+   269→   269→  const handleUpload = async (e: React.FormEvent) => {
+   270→   270→    e.preventDefault()
+   271→   271→    setUploading(true)
+   272→   272→
+   273→   273→    try {
+   274→   274→      const formData = new FormData()
+   275→   275→      formData.append('title', uploadForm.title)
+   276→   276→      formData.append('description', uploadForm.description)
+   277→   277→      formData.append('type', uploadForm.type)
+   278→   278→      if (uploadForm.type === 'live' && uploadForm.liveUrl) {
+   279→   279→        formData.append('liveUrl', uploadForm.liveUrl)
+   280→   280→      }
+   281→   281→      if (uploadForm.file && uploadForm.type !== 'live') {
+   282→   282→        formData.append('file', uploadForm.file)
+   283→   283→      }
+   284→   284→
+   285→   285→      const res = await fetch('/api/content', { method: 'POST', body: formData })
+   286→   286→      const data = await res.json()
+   287→   287→
+   288→   288→      if (!res.ok) {
+   289→   289→        setToastMsg({ message: data.error || 'Upload failed', type: 'error' })
+   290→   290→      } else {
+   291→   291→        setToastMsg({ message: 'Content uploaded successfully!', type: 'success' })
+   292→   292→        setUploadForm({ title: '', description: '', type: 'video', file: null, liveUrl: '' })
+   293→   293→        setShowUploadForm(false)
+   294→   294→        fetchContents()
+   295→   295→      }
+   296→   296→    } catch (error) {
+   297→   297→      setToastMsg({ message: 'Upload failed. Please try again.', type: 'error' })
+   298→   298→    } finally {
+   299→   299→      setUploading(false)
+   300→   300→    }
+   301→   301→  }
+   302→   302→
+   303→   303→  const handleDelete = async (id: string) => {
+   304→   304→    if (!confirm('Are you sure you want to delete this content?')) return
+   305→   305→    try {
+   306→   306→      const res = await fetch(`/api/content/${id}`, { method: 'DELETE' })
+   307→   307→      if (res.ok) {
+   308→   308→        setToastMsg({ message: 'Content deleted', type: 'success' })
+   309→   309→        fetchContents()
+   310→   310→      }
+   311→   311→    } catch (error) {
+   312→   312→      setToastMsg({ message: 'Failed to delete', type: 'error' })
+   313→   313→    }
+   314→   314→  }
+   315→   315→
+   316→   316→  const stats = {
+   317→   317→    total: contents.length,
+   318→   318→    videos: contents.filter(c => c.type === 'video').length,
+   319→   319→    pdfs: contents.filter(c => c.type === 'pdf').length,
+   320→   320→    ppts: contents.filter(c => c.type === 'ppt').length,
+   321→   321→    lives: contents.filter(c => c.type === 'live').length,
+   322→   322→  }
+   323→   323→
+   324→   324→  return (
+   325→   325→    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+   326→   326→      {toastMsg && <ToastDemo message={toastMsg.message} type={toastMsg.type} />}
+   327→   327→
+   328→   328→      {/* Header */}
+   329→   329→      <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-900/80 backdrop-blur-xl">
+   330→   330→        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+   331→   331→          <div className="flex items-center gap-3">
+   332→   332→            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-purple-600 flex items-center justify-center">
+   333→   333→              <Play className="h-5 w-5 text-white" />
+   334→   334→            </div>
+   335→   335→            <div>
+   336→   336→              <h1 className="text-lg font-bold text-white">MediaHub</h1>
+   337→   337→              <p className="text-xs text-slate-400">Admin Dashboard</p>
+   338→   338→            </div>
+   339→   339→          </div>
+   340→   340→          <div className="flex items-center gap-3">
+   341→   341→            <Badge className="bg-rose-500/10 text-rose-400 border-rose-500/20">
+   342→   342→              <Shield className="h-3 w-3 mr-1" /> Admin
+   343→   343→            </Badge>
+   344→   344→            <span className="text-sm text-slate-300 hidden sm:block">{user.name || user.email}</span>
+   345→   345→            <Button variant="ghost" size="sm" onClick={onLogout} className="text-slate-400 hover:text-white hover:bg-white/5">
+   346→   346→              <LogOut className="h-4 w-4" />
+   347→   347→            </Button>
+   348→   348→          </div>
+   349→   349→        </div>
+   350→   350→      </header>
+   351→   351→
+   352→   352→      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+   353→   353→        {/* Stats */}
+   354→   354→        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+   355→   355→          {[
+   356→   356→            { label: 'Total', value: stats.total, color: 'from-rose-500 to-pink-600' },
+   357→   357→            { label: 'Videos', value: stats.videos, color: 'from-violet-500 to-purple-600' },
+   358→   358→            { label: 'PDFs', value: stats.pdfs, color: 'from-amber-500 to-orange-600' },
+   359→   359→            { label: 'Live', value: stats.lives, color: 'from-emerald-500 to-teal-600' },
+   360→   360→          ].map(s => (
+   361→   361→            <Card key={s.label} className="border-white/10 bg-white/5 backdrop-blur-sm">
+   362→   362→              <CardContent className="p-4">
+   363→   363→                <p className="text-xs text-slate-400 uppercase tracking-wider">{s.label}</p>
+   364→   364→                <p className="text-2xl font-bold bg-gradient-to-r bg-clip-text text-transparent {s.color}" style={{ backgroundImage: `linear-gradient(to right, var(--tw-gradient-stops))` }}>
+   365→   365→                  <span className={s.color.includes('rose') ? 'text-rose-400' : s.color.includes('violet') ? 'text-violet-400' : s.color.includes('amber') ? 'text-amber-400' : 'text-emerald-400'}>{s.value}</span>
+   366→   366→                </p>
+   367→   367→              </CardContent>
+   368→   368→            </Card>
+   369→   369→          ))}
+   370→   370→        </div>
+   371→   371→
+   372→   372→        {/* Upload Section */}
+   373→   373→        <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+   374→   374→          <CardHeader className="pb-3">
+   375→   375→            <div className="flex items-center justify-between">
+   376→   376→              <div className="flex items-center gap-2">
+   377→   377→                <Upload className="h-5 w-5 text-rose-400" />
+   378→   378→                <CardTitle className="text-white">Upload Content</CardTitle>
+   379→   379→              </div>
+   380→   380→              <Button
+   381→   381→                onClick={() => setShowUploadForm(!showUploadForm)}
+   382→   382→                variant="outline"
+   383→   383→                size="sm"
+   384→   384→                className="border-white/10 text-slate-300 hover:bg-white/5"
+   385→   385→              >
+   386→   386→                {showUploadForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+   387→   387→                {showUploadForm ? 'Cancel' : 'New Upload'}
+   388→   388→              </Button>
+   389→   389→            </div>
+   390→   390→          </CardHeader>
+   391→   391→          {showUploadForm && (
+   392→   392→            <CardContent className="pt-0">
+   393→   393→              <form onSubmit={handleUpload} className="space-y-4">
+   394→   394→                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   395→   395→                  <div className="space-y-2">
+   396→   396→                    <label className="text-sm font-medium text-slate-300">Title *</label>
+   397→   397→                    <Input
+   398→   398→                      value={uploadForm.title}
+   399→   399→                      onChange={(e) => setUploadForm({ ...uploadForm, title: e.target.value })}
+   400→   400→                      placeholder="Enter content title"
+   401→   401→                      required
+   402→   402→                      className="bg-white/5 border-white/10 text-white placeholder:text-slate-500"
+   403→   403→                    />
+   404→   404→                  </div>
+   405→   405→                  <div className="space-y-2">
+   406→   406→                    <label className="text-sm font-medium text-slate-300">Type *</label>
+   407→   407→                    <Select value={uploadForm.type} onValueChange={(v) => setUploadForm({ ...uploadForm, type: v })}>
+   408→   408→                      <SelectTrigger className="bg-white/5 border-white/10 text-white">
+   409→   409→                        <SelectValue />
+   410→   410→                      </SelectTrigger>
+   411→   411→                      <SelectContent>
+   412→   412→                        <SelectItem value="video">🎥 Video</SelectItem>
+   413→   413→                        <SelectItem value="pdf">📄 PDF</SelectItem>
+   414→   414→                        <SelectItem value="ppt">📊 PPT</SelectItem>
+   415→   415→                        <SelectItem value="live">📡 Live Video</SelectItem>
+   416→   416→                      </SelectContent>
+   417→   417→                    </Select>
+   418→   418→                  </div>
+   419→   419→                </div>
+   420→   420→                <div className="space-y-2">
+   421→   421→                  <label className="text-sm font-medium text-slate-300">Description</label>
+   422→   422→                  <Textarea
+   423→   423→                    value={uploadForm.description}
+   424→   424→                    onChange={(e) => setUploadForm({ ...uploadForm, description: e.target.value })}
+   425→   425→                    placeholder="Brief description of the content..."
+   426→   426→                    rows={3}
+   427→   427→                    className="bg-white/5 border-white/10 text-white placeholder:text-slate-500"
+   428→   428→                  />
+   429→   429→                </div>
+   430→   430→                {uploadForm.type === 'live' ? (
+   431→   431→                  <div className="space-y-2">
+   432→   432→                    <label className="text-sm font-medium text-slate-300">Live Stream URL *</label>
+   433→   433→                    <Input
+   434→   434→                      value={uploadForm.liveUrl}
+   435→   435→                      onChange={(e) => setUploadForm({ ...uploadForm, liveUrl: e.target.value })}
+   436→   436→                      placeholder="https://youtube.com/live/..."
+   437→   437→                      required
+   438→   438→                      className="bg-white/5 border-white/10 text-white placeholder:text-slate-500"
+   439→   439→                    />
+   440→   440→                  </div>
+   441→   441→                ) : (
+   442→   442→                  <div className="space-y-2">
+   443→   443→                    <label className="text-sm font-medium text-slate-300">Upload File *</label>
+   444→   444→                    <div className="border-2 border-dashed border-white/10 rounded-xl p-6 text-center hover:border-rose-500/30 transition-colors">
+   445→   445→                      <input
+   446→   446→                        type="file"
+   447→   447→                        accept={uploadForm.type === 'video' ? 'video/*' : uploadForm.type === 'pdf' ? '.pdf' : uploadForm.type === 'ppt' ? '.ppt,.pptx' : '*'}
+   448→   448→                        onChange={(e) => setUploadForm({ ...uploadForm, file: e.target.files?.[0] || null })}
+   449→   449→                        className="hidden"
+   450→   450→                        id="file-upload"
+   451→   451→                      />
+   452→   452→                      <label htmlFor="file-upload" className="cursor-pointer">
+   453→   453→                        {uploadForm.file ? (
+   454→   454→                          <div className="flex items-center justify-center gap-2 text-emerald-400">
+   455→   455→                            <CheckCircle className="h-5 w-5" />
+   456→   456→                            <span className="text-sm">{uploadForm.file.name}</span>
+   457→   457→                          </div>
+   458→   458→                        ) : (
+   459→   459→                          <div className="space-y-2">
+   460→   460→                            <Upload className="h-8 w-8 text-slate-500 mx-auto" />
+   461→   461→                            <p className="text-sm text-slate-400">Click to upload file</p>
+   462→   462→                            <p className="text-xs text-slate-500">
+   463→   463→                              {uploadForm.type === 'video' ? 'MP4, MOV, AVI...' : uploadForm.type === 'pdf' ? 'PDF files' : 'PPT, PPTX files'}
+   464→   464→                            </p>
+   465→   465→                          </div>
+   466→   466→                        )}
+   467→   467→                      </label>
+   468→   468→                    </div>
+   469→   469→                  </div>
+   470→   470→                )}
+   471→   471→                <Button
+   472→   472→                  type="submit"
+   473→   473→                  disabled={uploading}
+   474→   474→                  className="w-full sm:w-auto bg-gradient-to-r from-rose-500 to-purple-600 hover:from-rose-600 hover:to-purple-700 text-white shadow-lg shadow-rose-500/25"
+   475→   475→                >
+   476→   476→                  {uploading ? 'Uploading...' : 'Upload Content'}
+   477→   477→                </Button>
+   478→   478→              </form>
+   479→   479→            </CardContent>
+   480→   480→          )}
+   481→   481→        </Card>
+   482→   482→
+   483→   483→        {/* Content List */}
+   484→   484→        <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+   485→   485→          <CardHeader>
+   486→   486→            <div className="flex items-center gap-2">
+   487→   487→              <FolderOpen className="h-5 w-5 text-rose-400" />
+   488→   488→              <CardTitle className="text-white">All Content</CardTitle>
+   489→   489→              <Badge variant="secondary" className="ml-auto bg-white/10 text-slate-300">
+   490→   490→                {contents.length} items
+   491→   491→              </Badge>
+   492→   492→            </div>
+   493→   493→          </CardHeader>
+   494→   494→          <CardContent>
+   495→   495→            {loading ? (
+   496→   496→              <div className="space-y-3">
+   497→   497→                {[1, 2, 3].map(i => (
+   498→   498→                  <Skeleton key={i} className="h-20 bg-white/5 rounded-xl" />
+   499→   499→                ))}
+   500→   500→              </div>
+   501→   501→            ) : contents.length === 0 ? (
+   502→   502→              <div className="text-center py-12 text-slate-500">
+   503→   503→                <FolderOpen className="h-12 w-12 mx-auto mb-3 opacity-50" />
+   504→   504→                <p>No content uploaded yet. Click "New Upload" to get started!</p>
+   505→   505→              </div>
+   506→   506→            ) : (
+   507→   507→              <div className="space-y-3">
+   508→   508→                {contents.map(item => (
+   509→   509→                  <div key={item.id} className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all group">
+   510→   510→                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${getTypeColor(item.type)}`}>
+   511→   511→                      {getTypeIcon(item.type)}
+   512→   512→                    </div>
+   513→   513→                    <div className="flex-1 min-w-0">
+   514→   514→                      <h3 className="font-semibold text-white truncate">{item.title}</h3>
+   515→   515→                      <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
+   516→   516→                        <Badge variant="secondary" className={getTypeBadgeColor(item.type)}>
+   517→   517→                          {item.type.toUpperCase()}
+   518→   518→                        </Badge>
+   519→   519→                        <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {item.views}</span>
+   520→   520→                        <span className="flex items-center gap-1"><MessageCircle className="h-3 w-3" /> {item._count?.comments || 0}</span>
+   521→   521→                        <span className="hidden sm:block">{formatDate(item.createdAt)}</span>
+   522→   522→                      </div>
+   523→   523→                    </div>
+   524→   524→                    <Button
+   525→   525→                      variant="ghost"
+   526→   526→                      size="icon"
+   527→   527→                      onClick={() => handleDelete(item.id)}
+   528→   528→                      className="text-slate-500 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
+   529→   529→                    >
+   530→   530→                      <Trash2 className="h-4 w-4" />
+   531→   531→                    </Button>
+   532→   532→                  </div>
+   533→   533→                ))}
+   534→   534→              </div>
+   535→   535→            )}
+   536→   536→          </CardContent>
+   537→   537→        </Card>
+   538→   538→      </main>
+   539→   539→    </div>
+   540→   540→  )
+   541→   541→}
+   542→   542→
+   543→   543→// ==================== USER PANEL ====================
+   544→   544→function UserPanel({ user, onLogout }: { user: User; onLogout: () => void }) {
+   545→   545→  const [contents, setContents] = useState<ContentItem[]>([])
+   546→   546→  const [loading, setLoading] = useState(true)
+   547→   547→  const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null)
+   548→   548→  const [activeTab, setActiveTab] = useState('all')
+   549→   549→  const [searchQuery, setSearchQuery] = useState('')
+   550→   550→  const [comments, setComments] = useState<CommentItem[]>([])
+   551→   551→  const [commentText, setCommentText] = useState('')
+   552→   552→  const [likesCount, setLikesCount] = useState(0)
+   553→   553→  const [dislikesCount, setDislikesCount] = useState(0)
+   554→   554→  const [userReaction, setUserReaction] = useState<string | null>(null)
+   555→   555→  const [toastMsg, setToastMsg] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
+   556→   556→
+   557→   557→  const fetchContents = useCallback(async () => {
+   558→   558→    try {
+   559→   559→      const url = activeTab === 'all' ? '/api/content' : `/api/content?type=${activeTab}`
+   560→   560→      const res = await fetch(url)
+   561→   561→      const data = await res.json()
+   562→   562→      setContents(data)
+   563→   563→    } catch (error) {
+   564→   564→      console.error('Fetch error:', error)
+   565→   565→    } finally {
+   566→   566→      setLoading(false)
+   567→   567→    }
+   568→   568→  }, [activeTab])
+   569→   569→
+   570→   570→  useEffect(() => { fetchContents() }, [fetchContents])
+   571→   571→
+   572→   572→  const openContent = async (item: ContentItem) => {
+   573→   573→    try {
+   574→   574→      const res = await fetch(`/api/content/${item.id}`)
+   575→   575→      const data = await res.json()
+   576→   576→      setSelectedContent(data)
+   577→   577→      setComments(data.comments || [])
+   578→   578→      setLikesCount(data.likesCount || 0)
+   579→   579→      setDislikesCount(data.dislikesCount || 0)
+   580→   580→
+   581→   581→      // Get user's reaction
+   582→   582→      const reactionRes = await fetch(`/api/content/${item.id}/like?userId=${user.id}`)
+   583→   583→      const reactionData = await reactionRes.json()
+   584→   584→      setUserReaction(reactionData.reaction)
+   585→   585→    } catch (error) {
+   586→   586→      console.error('Error:', error)
+   587→   587→    }
+   588→   588→  }
+   589→   589→
+   590→   590→  const handleComment = async () => {
+   591→   591→    if (!commentText.trim() || !selectedContent) return
+   592→   592→
+   593→   593→    try {
+   594→   594→      const res = await fetch(`/api/content/${selectedContent.id}/comments`, {
+   595→   595→        method: 'POST',
+   596→   596→        headers: { 'Content-Type': 'application/json' },
+   597→   597→        body: JSON.stringify({ text: commentText, userId: user.id, userName: user.name }),
+   598→   598→      })
+   599→   599→      const data = await res.json()
+   600→   600→      if (res.ok) {
+   601→   601→        setComments(prev => [data, ...prev])
+   602→   602→        setCommentText('')
+   603→   603→      }
+   604→   604→    } catch (error) {
+   605→   605→      setToastMsg({ message: 'Failed to add comment', type: 'error' })
+   606→   606→    }
+   607→   607→  }
+   608→   608→
+   609→   609→  const handleReaction = async (type: 'like' | 'dislike') => {
+   610→   610→    if (!selectedContent) return
+   611→   611→
+   612→   612→    try {
+   613→   613→      const res = await fetch(`/api/content/${selectedContent.id}/like`, {
+   614→   614→        method: 'POST',
+   615→   615→        headers: { 'Content-Type': 'application/json' },
+   616→   616→        body: JSON.stringify({ type, userId: user.id }),
+   617→   617→      })
+   618→   618→      const data = await res.json()
+   619→   619→
+   620→   620→      if (data.action === 'created' || data.action === 'switched') {
+   621→   621→        setUserReaction(type)
+   622→   622→        setLikesCount(data.likesCount ?? likesCount + (type === 'like' ? 1 : 0))
+   623→   623→        setDislikesCount(data.dislikesCount ?? dislikesCount + (type === 'dislike' ? 1 : 0))
+   624→   624→      } else if (data.action === 'removed') {
+   625→   625→        setUserReaction(null)
+   626→   626→        setLikesCount(prev => type === 'like' ? prev - 1 : prev)
+   627→   627→        setDislikesCount(prev => type === 'dislike' ? prev - 1 : prev)
+   628→   628→      }
+   629→   629→    } catch (error) {
+   630→   630→      setToastMsg({ message: 'Failed to process reaction', type: 'error' })
+   631→   631→    }
+   632→   632→  }
+   633→   633→
+   634→   634→  const handleDownload = () => {
+   635→   635→    if (selectedContent?.fileUrl) {
+   636→   636→      window.open(selectedContent.fileUrl, '_blank')
+   637→   637→      setToastMsg({ message: 'Download started!', type: 'success' })
+   638→   638→    }
+   639→   639→  }
+   640→   640→
+   641→   641→  const filteredContents = contents.filter(c =>
+   642→   642→    c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+   643→   643→    (c.description && c.description.toLowerCase().includes(searchQuery.toLowerCase()))
+   644→   644→  )
+   645→   645→
+   646→   646→  return (
+   647→   647→    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+   648→   648→      {toastMsg && <ToastDemo message={toastMsg.message} type={toastMsg.type} />}
+   649→   649→
+   650→   650→      {/* Header */}
+   651→   651→      <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-900/80 backdrop-blur-xl">
+   652→   652→        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+   653→   653→          <div className="flex items-center gap-3">
+   654→   654→            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-purple-600 flex items-center justify-center">
+   655→   655→              <Play className="h-5 w-5 text-white" />
+   656→   656→            </div>
+   657→   657→            <div>
+   658→   658→              <h1 className="text-lg font-bold text-white">MediaHub</h1>
+   659→   659→              <p className="text-xs text-slate-400">Content Library</p>
+   660→   660→            </div>
+   661→   661→          </div>
+   662→   662→          <div className="flex items-center gap-3">
+   663→   663→            <Avatar className="h-8 w-8">
+   664→   664→              <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white text-xs">
+   665→   665→                {user.name?.charAt(0) || user.email.charAt(0)}
+   666→   666→              </AvatarFallback>
+   667→   667→            </Avatar>
+   668→   668→            <span className="text-sm text-slate-300 hidden sm:block">{user.name || user.email}</span>
+   669→   669→            <Button variant="ghost" size="sm" onClick={onLogout} className="text-slate-400 hover:text-white hover:bg-white/5">
+   670→   670→              <LogOut className="h-4 w-4" />
+   671→   671→            </Button>
+   672→   672→          </div>
+   673→   673→        </div>
+   674→   674→      </header>
+   675→   675→
+   676→   676→      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+   677→   677→        {/* Search & Filters */}
+   678→   678→        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+   679→   679→          <div className="relative flex-1">
+   680→   680→            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+   681→   681→            <Input
+   682→   682→              placeholder="Search content..."
+   683→   683→              value={searchQuery}
+   684→   684→              onChange={(e) => setSearchQuery(e.target.value)}
+   685→   685→              className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-slate-500"
+   686→   686→            />
+   687→   687→          </div>
+   688→   688→          <Tabs value={activeTab} onValueChange={setActiveTab}>
+   689→   689→            <TabsList className="bg-white/5 border border-white/10">
+   690→   690→              {[
+   691→   691→                { value: 'all', label: 'All', icon: LayoutGrid },
+   692→   692→                { value: 'video', label: 'Videos', icon: Video },
+   693→   693→                { value: 'pdf', label: 'PDFs', icon: FileText },
+   694→   694→                { value: 'ppt', label: 'PPTs', icon: Presentation },
+   695→   695→                { value: 'live', label: 'Live', icon: Radio },
+   696→   696→              ].map(tab => (
+   697→   697→                <TabsTrigger key={tab.value} value={tab.value} className="text-slate-400 data-[state=active]:text-white data-[state=active]:bg-white/10">
+   698→   698→                  <tab.icon className="h-3.5 w-3.5 sm:mr-1.5" />
+   699→   699→                  <span className="hidden sm:inline">{tab.label}</span>
+   700→   700→                </TabsTrigger>
+   701→   701→              ))}
+   702→   702→            </TabsList>
+   703→   703→          </Tabs>
+   704→   704→        </div>
+   705→   705→
+   706→   706→        {/* Content Grid */}
+   707→   707→        {loading ? (
+   708→   708→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   709→   709→            {[1, 2, 3, 4, 5, 6].map(i => (
+   710→   710→              <Skeleton key={i} className="h-72 bg-white/5 rounded-2xl" />
+   711→   711→            ))}
+   712→   712→          </div>
+   713→   713→        ) : filteredContents.length === 0 ? (
+   714→   714→          <div className="text-center py-20 text-slate-500">
+   715→   715→            <FolderOpen className="h-16 w-16 mx-auto mb-4 opacity-50" />
+   716→   716→            <p className="text-lg font-medium">No content found</p>
+   717→   717→            <p className="text-sm mt-1">Try adjusting your search or filter</p>
+   718→   718→          </div>
+   719→   719→        ) : (
+   720→   720→          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+   721→   721→            {filteredContents.map(item => (
+   722→   722→              <Card
+   723→   723→                key={item.id}
+   724→   724→                className="border-white/10 bg-white/5 backdrop-blur-sm overflow-hidden hover:bg-white/10 hover:border-white/20 transition-all duration-300 cursor-pointer group"
+   725→   725→                onClick={() => openContent(item)}
+   726→   726→              >
+   727→   727→                {/* Thumbnail/Preview Area */}
+   728→   728→                <div className={`h-44 flex items-center justify-center ${getTypeColor(item.type)} relative`}>
+   729→   729→                  <div className="text-6xl opacity-30">
+   730→   730→                    {item.type === 'video' ? '🎥' : item.type === 'pdf' ? '📄' : item.type === 'ppt' ? '📊' : '📡'}
+   731→   731→                  </div>
+   732→   732→                  <Badge className="absolute top-3 right-3" variant="secondary">
+   733→   733→                    {getTypeIcon(item.type)}
+   734→   734→                    <span className="ml-1.5">{item.type.toUpperCase()}</span>
+   735→   735→                  </Badge>
+   736→   736→                  {item.type === 'live' && (
+   737→   737→                    <Badge className="absolute top-3 left-3 bg-red-500 text-white text-[10px] animate-pulse">● LIVE</Badge>
+   738→   738→                  )}
+   739→   739→                  {item.type === 'video' && (
+   740→   740→                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+   741→   741→                      <div className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+   742→   742→                        <Play className="h-6 w-6 text-white ml-1" />
+   743→   743→                      </div>
+   744→   744→                    </div>
+   745→   745→                  )}
+   746→   746→                </div>
+   747→   747→                <CardContent className="p-4">
+   748→   748→                  <h3 className="font-semibold text-white mb-2 line-clamp-2">{item.title}</h3>
+   749→   749→                  {item.description && (
+   750→   750→                    <p className="text-sm text-slate-400 mb-3 line-clamp-2">{item.description}</p>
+   751→   751→                  )}
+   752→   752→                  <div className="flex items-center justify-between text-xs text-slate-500">
+   753→   753→                    <div className="flex items-center gap-3">
+   754→   754→                      <span className="flex items-center gap-1"><Eye className="h-3 w-3" /> {item.views}</span>
+   755→   755→                      <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3" /> {item.likesCount}</span>
+   756→   756→                      <span className="flex items-center gap-1"><MessageCircle className="h-3 w-3" /> {item._count?.comments || 0}</span>
+   757→   757→                    </div>
+   758→   758→                    <span>{formatDate(item.createdAt)}</span>
+   759→   759→                  </div>
+   760→   760→                </CardContent>
+   761→   761→              </Card>
+   762→   762→            ))}
+   763→   763→          </div>
+   764→   764→        )}
+   765→   765→      </main>
+   766→   766→
+   767→   767→      {/* Content Detail Modal */}
+   768→   768→      <Dialog open={!!selectedContent} onOpenChange={() => setSelectedContent(null)}>
+   769→   769→        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-slate-900 border-white/10 text-white">
+   770→   770→          {selectedContent && (
+   771→   771→            <>
+   772→   772→              <DialogHeader>
+   773→   773→                <div className="flex items-center gap-2 mb-2">
+   774→   774→                  <Badge variant="secondary" className={getTypeBadgeColor(selectedContent.type)}>
+   775→   775→                    {getTypeIcon(selectedContent.type)}
+   776→   776→                    <span className="ml-1.5">{selectedContent.type.toUpperCase()}</span>
+   777→   777→                  </Badge>
+   778→   778→                  <span className="text-xs text-slate-500">{formatDate(selectedContent.createdAt)}</span>
+   779→   779→                </div>
+   780→   780→                <DialogTitle className="text-xl">{selectedContent.title}</DialogTitle>
+   781→   781→                {selectedContent.description && (
+   782→   782→                  <DialogDescription className="text-slate-400">{selectedContent.description}</DialogDescription>
+   783→   783→                )}
+   784→   784→              </DialogHeader>
+   785→   785→
+   786→   786→              {/* Content Viewer */}
+   787→   787→              <div className="rounded-xl overflow-hidden bg-black/30 border border-white/10">
+   788→   788→                {selectedContent.type === 'video' && selectedContent.fileUrl && (
+   789→   789→                  <video
+   790→   790→                    controls
+   791→   791→                    className="w-full max-h-96 object-contain bg-black"
+   792→   792→                    src={selectedContent.fileUrl}
+   793→   793→                  >
+   794→   794→                    Your browser does not support the video tag.
+   795→   795→                  </video>
+   796→   796→                )}
+   797→   797→                {selectedContent.type === 'live' && selectedContent.liveUrl && (
+   798→   798→                  <div className="p-8 text-center">
+   799→   799→                    <Radio className="h-12 w-12 text-purple-400 mx-auto mb-3 animate-pulse" />
+   800→   800→                    <p className="text-purple-300 font-medium">Live Stream Active</p>
+   801→   801→                    <a
+   802→   802→                      href={selectedContent.liveUrl}
+   803→   803→                      target="_blank"
+   804→   804→                      rel="noopener noreferrer"
+   805→   805→                      className="inline-flex items-center gap-2 mt-4 px-6 py-2.5 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium transition-colors"
+   806→   806→                    >
+   807→   807→                      <Play className="h-4 w-4" /> Watch Live Stream
+   808→   808→                    </a>
+   809→   809→                  </div>
+   810→   810→                )}
+   811→   811→                {selectedContent.type === 'pdf' && (
+   812→   812→                  <div className="p-8 text-center">
+   813→   813→                    <FileText className="h-16 w-16 text-amber-400 mx-auto mb-4" />
+   814→   814→                    <p className="text-amber-300 font-medium text-lg">{selectedContent.fileName || 'Document'}</p>
+   815→   815→                    <p className="text-slate-400 text-sm mt-1">{formatFileSize(selectedContent.fileSize)}</p>
+   816→   816→                    <Button
+   817→   817→                      onClick={handleDownload}
+   818→   818→                      className="mt-4 bg-amber-500 hover:bg-amber-600 text-white"
+   819→   819→                    >
+   820→   820→                      <Download className="h-4 w-4 mr-2" /> Download PDF
+   821→   821→                    </Button>
+   822→   822→                  </div>
+   823→   823→                )}
+   824→   824→                {selectedContent.type === 'ppt' && (
+   825→   825→                  <div className="p-8 text-center">
+   826→   826→                    <Presentation className="h-16 w-16 text-emerald-400 mx-auto mb-4" />
+   827→   827→                    <p className="text-emerald-300 font-medium text-lg">{selectedContent.fileName || 'Presentation'}</p>
+   828→   828→                    <p className="text-slate-400 text-sm mt-1">{formatFileSize(selectedContent.fileSize)}</p>
+   829→   829→                    <Button
+   830→   830→                      onClick={handleDownload}
+   831→   831→                      className="mt-4 bg-emerald-500 hover:bg-emerald-600 text-white"
+   832→   832→                    >
+   833→   833→                      <Download className="h-4 w-4 mr-2" /> Download PPT
+   834→   834→                    </Button>
+   835→   835→                  </div>
+   836→   836→                )}
+   837→   837→              </div>
+   838→   838→
+   839→   839→              {/* Stats & Actions */}
+   840→   840→              <div className="flex flex-wrap items-center gap-4 py-2">
+   841→   841→                <div className="flex items-center gap-2 text-sm text-slate-400">
+   842→   842→                  <Eye className="h-4 w-4" />
+   843→   843→                  <span>{selectedContent.views} views</span>
+   844→   844→                </div>
+   845→   845→                <Separator orientation="vertical" className="h-6 bg-white/10" />
+   846→   846→
+   847→   847→                {/* Like / Dislike */}
+   848→   848→                <div className="flex items-center gap-1">
+   849→   849→                  <Button
+   850→   850→                    variant="ghost"
+   851→   851→                    size="sm"
+   852→   852→                    onClick={() => handleReaction('like')}
+   853→   853→                    className={`gap-1.5 ${userReaction === 'like' ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/15' : 'text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10'}`}
+   854→   854→                  >
+   855→   855→                    <ThumbsUp className={`h-4 w-4 ${userReaction === 'like' ? 'fill-current' : ''}`} />
+   856→   856→                    <span>{likesCount}</span>
+   857→   857→                  </Button>
+   858→   858→                  <Button
+   859→   859→                    variant="ghost"
+   860→   860→                    size="sm"
+   861→   861→                    onClick={() => handleReaction('dislike')}
+   862→   862→                    className={`gap-1.5 ${userReaction === 'dislike' ? 'text-red-400 bg-red-500/10 hover:bg-red-500/15' : 'text-slate-400 hover:text-red-400 hover:bg-red-500/10'}`}
+   863→   863→                  >
+   864→   864→                    <ThumbsDown className={`h-4 w-4 ${userReaction === 'dislike' ? 'fill-current' : ''}`} />
+   865→   865→                    <span>{dislikesCount}</span>
+   866→   866→                  </Button>
+   867→   867→                </div>
+   868→   868→
+   869→   869→                {selectedContent.type !== 'live' && selectedContent.fileUrl && (
+   870→   870→                  <>
+   871→   871→                    <Separator orientation="vertical" className="h-6 bg-white/10" />
+   872→   872→                    <Button
+   873→   873→                      variant="outline"
+   874→   874→                      size="sm"
+   875→   875→                      onClick={handleDownload}
+   876→   876→                      className="border-white/10 text-slate-300 hover:bg-white/5 gap-1.5"
+   877→   877→                    >
+   878→   878→                      <Download className="h-4 w-4" /> Download
+   879→   879→                    </Button>
+   880→   880→                  </>
+   881→   881→                )}
+   882→   882→              </div>
+   883→   883→
+   884→   884→              <Separator className="bg-white/10" />
+   885→   885→
+   886→   886→              {/* Comments Section */}
+   887→   887→              <div className="space-y-4">
+   888→   888→                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+   889→   889→                  <MessageCircle className="h-5 w-5 text-rose-400" />
+   890→   890→                  Comments ({comments.length})
+   891→   891→                </h3>
+   892→   892→
+   893→   893→                {/* Add Comment */}
+   894→   894→                <div className="flex gap-3">
+   895→   895→                  <Avatar className="h-9 w-9 flex-shrink-0">
+   896→   896→                    <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white text-xs">
+   897→   897→                      {user.name?.charAt(0) || user.email.charAt(0)}
+   898→   898→                    </AvatarFallback>
+   899→   899→                  </Avatar>
+   900→   900→                  <div className="flex-1 flex gap-2">
+   901→   901→                    <Input
+   902→   902→                      placeholder="Add a comment..."
+   903→   903→                      value={commentText}
+   904→   904→                      onChange={(e) => setCommentText(e.target.value)}
+   905→   905→                      onKeyDown={(e) => e.key === 'Enter' && handleComment()}
+   906→   906→                      className="bg-white/5 border-white/10 text-white placeholder:text-slate-500"
+   907→   907→                    />
+   908→   908→                    <Button
+   909→   909→                      onClick={handleComment}
+   910→   910→                      size="icon"
+   911→   911→                      className="flex-shrink-0 bg-gradient-to-r from-rose-500 to-purple-600 hover:from-rose-600 hover:to-purple-700 text-white"
+   912→   912→                    >
+   913→   913→                      <MessageCircle className="h-4 w-4" />
+   914→   914→                    </Button>
+   915→   915→                  </div>
+   916→   916→                </div>
+   917→   917→
+   918→   918→                {/* Comments List */}
+   919→   919→                <ScrollArea className="max-h-72">
+   920→   920→                  <div className="space-y-3 pr-4">
+   921→   921→                    {comments.length === 0 ? (
+   922→   922→                      <p className="text-center text-slate-500 py-6">No comments yet. Be the first to comment!</p>
+   923→   923→                    ) : (
+   924→   924→                      comments.map(comment => (
+   925→   925→                        <div key={comment.id} className="flex gap-3 p-3 rounded-xl bg-white/5">
+   926→   926→                          <Avatar className="h-8 w-8 flex-shrink-0">
+   927→   927→                            <AvatarFallback className="bg-gradient-to-br from-slate-500 to-slate-700 text-white text-[10px]">
+   928→   928→                              {comment.userName?.charAt(0) || 'U'}
+   929→   929→                            </AvatarFallback>
+   930→   930→                          </Avatar>
+   931→   931→                          <div className="flex-1 min-w-0">
+   932→   932→                            <div className="flex items-center gap-2">
+   933→   933→                              <span className="text-sm font-medium text-white">{comment.userName || 'User'}</span>
+   934→   934→                              <span className="text-xs text-slate-500">{formatDate(comment.createdAt)}</span>
+   935→   935→                            </div>
+   936→   936→                            <p className="text-sm text-slate-300 mt-1">{comment.text}</p>
+   937→   937→                          </div>
+   938→   938→                        </div>
+   939→   939→                      ))
+   940→   940→                    )}
+   941→   941→                  </div>
+   942→   942→                </ScrollArea>
+   943→   943→              </div>
+   944→   944→            </>
+   945→   945→          )}
+   946→   946→        </DialogContent>
+   947→   947→      </Dialog>
+   948→   948→    </div>
+   949→   949→  )
+   950→   950→}
+   951→   951→
+   952→   952→// ==================== MAIN APP ====================
+   953→   953→function getInitialUser(): User | null {
+   954→   954→  if (typeof window === 'undefined') return null
+   955→   955→  try {
+   956→   956→    const savedUser = localStorage.getItem('mediahub_user')
+   957→   957→    return savedUser ? JSON.parse(savedUser) : null
+   958→   958→  } catch {
+   959→   959→    return null
+   960→   960→  }
+   961→   961→}
+   962→   962→
+   963→   963→export default function Home() {
+   964→   964→  const [user, setUser] = useState<User | null>(getInitialUser)
+   965→   965→  const [mounted] = useState(true)
+   966→   966→
+   967→   967→  const handleLogin = (userData: User) => {
+   968→   968→    setUser(userData)
+   969→   969→    localStorage.setItem('mediahub_user', JSON.stringify(userData))
+   970→   970→  }
+   971→   971→
+   972→   972→  const handleLogout = () => {
+   973→   973→    setUser(null)
+   974→   974→    localStorage.removeItem('mediahub_user')
+   975→   975→  }
+   976→   976→
+   977→   977→  if (!mounted) {
+   978→   978→    return (
+   979→   979→      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+   980→   980→        <div className="h-8 w-8 animate-spin rounded-full border-2 border-rose-500/30 border-t-rose-500" />
+   981→   981→      </div>
+   982→   982→    )
+   983→   983→  }
+   984→   984→
+   985→   985→  if (!user) {
+   986→   986→    return <LoginPage onLogin={handleLogin} onRegister={handleLogin} />
+   987→   987→  }
+   988→   988→
+   989→   989→  if (user.role === 'admin') {
+   990→   990→    return <AdminPanel user={user} onLogout={handleLogout} />
+   991→   991→  }
+   992→   992→
+   993→   993→  return <UserPanel user={user} onLogout={handleLogout} />
+   994→   994→}
+   995→   995→

@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String
+  role      String   @default("user") // "admin" or "user"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  comments Comment[]
+  likes    Like[]
+}
+
+model Content {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  type        String   // "video", "pdf", "ppt", "live"
+  fileUrl     String?
+  thumbnailUrl String?
+  liveUrl     String?  // For live video streaming URL
+  fileName    String?
+  fileSize    Int?
+  views       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  comments Comment[]
+  likes    Like[]
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  text      String
+  userId    String
+  userName  String?
+  contentId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id])
+  content Content @relation(fields: [contentId], references: [id])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  type      String   // "like" or "dislike"
+  userId    String
+  contentId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  content Content @relation(fields: [contentId], references: [id])
+
+  @@unique([userId, contentId])
+}
